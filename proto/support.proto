@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package support;
+
+option go_package = "./proto/support";
+
+service AIService {
+  rpc ClassifyMessage (ClassifyRequest) returns (ClassifyResponse);
+  rpc GenerateReply (GenerateReplyRequest) returns (GenerateReplyResponse);
+}
+
+message ClassifyRequest {
+  string message_text = 1;
+  string ticket_id = 2;
+}
+
+message ClassifyResponse {
+  string category = 1;
+  float confidence = 2;
+  map<string, string> extracted_entities = 3;
+}
+
+message GenerateReplyRequest {
+  string message_text = 1;
+  string ticket_id = 2;
+  string category = 3;
+}
+
+message GenerateReplyResponse {
+  string reply_text = 1;
+  float confidence = 2;
+  bool requires_human = 3;
+}

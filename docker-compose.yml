@@ -1,0 +1,99 @@
+services:
+  # База данных
+  postgres:
+    image: postgres:15-alpine
+    container_name: support-postgres
+    environment:
+      POSTGRES_USER: support_user
+      POSTGRES_PASSWORD: support_password
+      POSTGRES_DB: support_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - support-net
+
+  # Redis для кэша
+  redis:
+    image: redis:7-alpine
+    container_name: support-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - support-net
+
+  # Zookeeper (для Kafka)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: support-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - support-net
+
+  # Kafka
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: support-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - support-net
+
+  # API-сервис (будем собирать из Dockerfile в папке api-service)
+  api-service:
+    build:
+      context: ./api-service
+      dockerfile: Dockerfile
+    container_name: support-api
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: support_user
+      DB_PASSWORD: support_password
+      DB_NAME: support_db
+      REDIS_ADDR: redis:6379
+      KAFKA_BROKERS: kafka:9092
+      AI_SERVICE_ADDR: ai-service:50051
+    networks:
+      - support-net
+
+  # AI-сервис
+  ai-service:
+    build:
+      context: .                # контекст - корень проекта
+      dockerfile: ai-service/Dockerfile
+    container_name: support-ai
+    ports:
+      - "50051:50051"
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKERS: kafka:9092
+    networks:
+      - support-net
+
+volumes:
+  postgres_data:
+
+networks:
+  support-net:
+    driver: bridge
